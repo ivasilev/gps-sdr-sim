@@ -12,8 +12,7 @@ project(gpsSdrSim)
 ########################################################################
 # Compiler specific setup
 ########################################################################
-set(CMAKE_C_EXTENSIONS OFF)
-set(CMAKE_C_STANDARD 99)
+set(CMAKE_CPP_STANDARD 14)
 if(("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_C_COMPILER_ID}" MATCHES "Clang") AND NOT WIN32)
     ADD_DEFINITIONS(-Wall)
     ADD_DEFINITIONS(-Wextra)
@@ -21,7 +20,7 @@ if(("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_C_COMPILER_ID}" MATCHES 
     ADD_DEFINITIONS(-Wno-unused)
     ADD_DEFINITIONS(-Wno-unused-parameter)
     ADD_DEFINITIONS(-Wno-missing-field-initializers)
-    ADD_DEFINITIONS(-std=c99)
+    ADD_DEFINITIONS(-std=c++14)
     ADD_DEFINITIONS(-pedantic)
     # for strdup, setenv, use either
     #ADD_DEFINITIONS(-D_POSIX_C_SOURCE=200809) # does not work with uClibc

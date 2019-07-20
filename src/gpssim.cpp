@@ -12,6 +12,10 @@
 #endif
 #include "gpssim.h"
 
+#include "constants.h"
+#include "ephemeris.h"
+
+
 int sinTable512[] = {
 	   2,   5,   8,  11,  14,  17,  20,  23,  26,  29,  32,  35,  38,  41,  44,  47,
 	  50,  53,  56,  59,  62,  65,  68,  71,  74,  77,  80,  83,  86,  89,  91,  94,
@@ -170,53 +174,7 @@ void codegen(int *ca, int prn)
 	return;
 }
 
-/*! \brief Convert a UTC date into a GPS date
- *  \param[in] t input date in UTC form
- *  \param[out] g output date in GPS form
- */
-void date2gps(const datetime_t *t, gpstime_t *g)
-{
-	int doy[12] = {0,31,59,90,120,151,181,212,243,273,304,334};
-	int ye;
-	int de;
-	int lpdays;
 
-	ye = t->y - 1980;
-
-	// Compute the number of leap days since Jan 5/Jan 6, 1980.
-	lpdays = ye/4 + 1;
-	if ((ye%4)==0 && t->m<=2)
-		lpdays--;
-
-	// Compute the number of days elapsed since Jan 5/Jan 6, 1980.
-	de = ye*365 + doy[t->m-1] + t->d + lpdays - 6;
-
-	// Convert time to GPS weeks and seconds.
-	g->week = de / 7;
-	g->sec = (double)(de%7)*SECONDS_IN_DAY + t->hh*SECONDS_IN_HOUR 
-		+ t->mm*SECONDS_IN_MINUTE + t->sec;
-
-	return;
-}
-
-void gps2date(const gpstime_t *g, datetime_t *t)
-{
-	// Convert Julian day number to calendar date
-	int c = (int)(7*g->week + floor(g->sec/86400.0)+2444245.0) + 1537;
-	int d = (int)((c-122.1)/365.25);
-	int e = 365*d + d/4;
-	int f = (int)((c-e)/30.6001);
-
-	t->d = c - e - (int)(30.6001*f);
-	t->m = f - 1 - 12*(f/14);
-	t->y = d - 4715 - ((7 + t->m)/10);
-
-	t->hh = ((int)(g->sec/3600.0))%24;
-	t->mm = ((int)(g->sec/60.0))%60;
-	t->sec = g->sec - 60.0*floor(g->sec/60.0);
-
-	return;
-}
 
 /*! \brief Convert Earth-centered Earth-fixed (ECEF) into Lat/Long/Heighth
  *  \param[in] xyz Input Array of X, Y and Z ECEF coordinates
@@ -376,7 +334,7 @@ void neu2azel(double *azel, const double *neu)
  *  \param[out] vel Computed velociy (vector)
  *  \param[clk] clk Computed clock
  */
-void satpos(ephem_t eph, gpstime_t g, double *pos, double *vel, double *clk)
+void satpos(Ephemeris eph, GpsTime g, double *pos, double *vel, double *clk)
 {
 	// Computing Satellite Velocity using the Broadcast Ephemeris
 	// http://www.ngs.noaa.gov/gps-toolbox/bc_velo.htm
@@ -487,7 +445,7 @@ void satpos(ephem_t eph, gpstime_t g, double *pos, double *vel, double *clk)
  *  \param[in] eph Ephemeris of given SV
  *  \param[out] sbf Array of five sub-frames, 10 long words each
  */
-void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, unsigned long sbf[5][N_DWRD_SBF])
+void eph2sbf(const Ephemeris eph, const ionoutc_t ionoutc, unsigned long sbf[5][N_DWRD_SBF])
 {
 	unsigned long wn;
 	unsigned long toe;
@@ -776,46 +734,13 @@ int replaceExpDesignator(char *str, int len)
 	return(n);
 }
 
-double subGpsTime(gpstime_t g1, gpstime_t g0)
-{
-	double dt;
-
-	dt = g1.sec - g0.sec;
-	dt += (double)(g1.week - g0.week) * SECONDS_IN_WEEK;
-
-	return(dt);
-}
-
-gpstime_t incGpsTime(gpstime_t g0, double dt)
-{
-	gpstime_t g1;
-
-	g1.week = g0.week;
-	g1.sec = g0.sec + dt;
-
-	g1.sec = round(g1.sec*1000.0)/1000.0; // Avoid rounding error
-
-	while (g1.sec>=SECONDS_IN_WEEK)
-	{
-		g1.sec -= SECONDS_IN_WEEK;
-		g1.week++;
-	}
-
-	while (g1.sec<0.0)
-	{
-		g1.sec += SECONDS_IN_WEEK;
-		g1.week--;
-	}
-
-	return(g1);
-}
 
 /*! \brief Read Ephemersi data from the RINEX Navigation file */
 /*  \param[out] eph Array of Output SV ephemeris data
  *  \param[in] fname File name of the RINEX file
  *  \returns Number of sets of ephemerides in the file
  */
-int readRinexNavAll(ephem_t eph[][MAX_SAT], ionoutc_t *ionoutc, const char *fname)
+int readRinexNavAll(Ephemeris eph[][MAX_SAT], ionoutc_t *ionoutc, const char *fname)
 {
 	FILE *fp;
 	int ieph;
@@ -824,9 +749,9 @@ int readRinexNavAll(ephem_t eph[][MAX_SAT], ionoutc_t *ionoutc, const char *fnam
 	char str[MAX_CHAR];
 	char tmp[20];
 
-	datetime_t t;
-	gpstime_t g;
-	gpstime_t g0;
+	DateTime t;
+	GpsTime g;
+	GpsTime g0;
 	double dt;
 
 	int flags = 0x0;
@@ -971,13 +896,13 @@ int readRinexNavAll(ephem_t eph[][MAX_SAT], ionoutc_t *ionoutc, const char *fnam
 		tmp[2] = 0;
 		t.sec = atof(tmp);
 
-		date2gps(&t, &g);
+        g = GpsTime(&t);
 		
 		if (g0.week==-1)
 			g0 = g;
 
 		// Check current time of clock
-		dt = subGpsTime(g, g0);
+		dt = g.Sub(&g0);
 		
 		if (dt>SECONDS_IN_HOUR)
 		{
@@ -1167,7 +1092,7 @@ int readRinexNavAll(ephem_t eph[][MAX_SAT], ionoutc_t *ionoutc, const char *fnam
 	return(ieph);
 }
 
-double ionosphericDelay(const ionoutc_t *ionoutc, gpstime_t g, double *llh, double *azel)
+double ionosphericDelay(const ionoutc_t *ionoutc, GpsTime g, double *llh, double *azel)
 {
 	double iono_delay = 0.0;
 	double E,phi_u,lam_u,F;
@@ -1250,7 +1175,7 @@ double ionosphericDelay(const ionoutc_t *ionoutc, gpstime_t g, double *llh, doub
  *  \param[in] g GPS time at time of receiving the signal
  *  \param[in] xyz position of the receiver
  */
-void computeRange(range_t *rho, ephem_t eph, ionoutc_t *ionoutc, gpstime_t g, double xyz[])
+void computeRange(range_t *rho, Ephemeris eph, ionoutc_t *ionoutc, GpsTime g, double xyz[])
 {
 	double pos[3],vel[3],clk[2];
 	double los[3];
@@ -1328,7 +1253,7 @@ void computeCodePhase(channel_t *chan, range_t rho1, double dt)
 	chan->f_code = CODE_FREQ + chan->f_carr*CARR_TO_CODE;
 
 	// Initial code phase and data bit counters.
-	ms = ((subGpsTime(chan->rho0.g,chan->g0)+6.0) - chan->rho0.range/SPEED_OF_LIGHT)*1000.0;
+	ms = ((chan->rho0.g.Sub(chan->g0)+6.0) - chan->rho0.range/SPEED_OF_LIGHT)*1000.0;
 
 	ims = (int)ms;
 	chan->code_phase = (ms-(double)ims)*CA_SEQ_LEN; // in chip
@@ -1464,10 +1389,10 @@ int readNmeaGGA(double xyz[USER_MOTION_SIZE][3], const char *filename)
 	return (numd);
 }
 
-int generateNavMsg(gpstime_t g, channel_t *chan, int init)
+int generateNavMsg(GpsTime g, channel_t *chan, int init)
 {
 	int iwrd,isbf;
-	gpstime_t g0;
+	GpsTime g0;
 	unsigned long wn,tow;
 	unsigned sbfwrd;
 	unsigned long prevwrd;
@@ -1546,7 +1471,7 @@ int generateNavMsg(gpstime_t g, channel_t *chan, int init)
 	return(1);
 }
 
-int checkSatVisibility(ephem_t eph, gpstime_t g, double *xyz, double elvMask, double *azel)
+int checkSatVisibility(Ephemeris eph, GpsTime g, double *xyz, double elvMask, double *azel)
 {
 	double llh[3],neu[3];
 	double pos[3],vel[3],clk[3],los[3];
@@ -1569,7 +1494,7 @@ int checkSatVisibility(ephem_t eph, gpstime_t g, double *xyz, double elvMask, do
 	return (0); // Invisible
 }
 
-int allocateChannel(channel_t *chan, ephem_t *eph, ionoutc_t ionoutc, gpstime_t grx, double *xyz, double elvMask)
+int allocateChannel(channel_t *chan, Ephemeris *eph, ionoutc_t ionoutc, GpsTime grx, double *xyz, double elvMask)
 {
 	int nsat=0;
 	int i,sv;
@@ -1672,8 +1597,8 @@ int main(int argc, char *argv[])
 
 	int sv;
 	int neph,ieph;
-	ephem_t eph[EPHEM_ARRAY_SIZE][MAX_SAT];
-	gpstime_t g0;
+	Ephemeris eph[EPHEM_ARRAY_SIZE][MAX_SAT];
+    GpsTime g0;
 	
 	double llh[3];
 	
@@ -1686,7 +1611,7 @@ int main(int argc, char *argv[])
 	short *iq_buff = NULL;
 	signed char *iq8_buff = NULL;
 
-	gpstime_t grx;
+	GpsTime grx;
 	double delt;
 	int isamp;
 
@@ -1713,8 +1638,8 @@ int main(int argc, char *argv[])
 	double ant_pat[37];
 	int ibs; // boresight angle index
 
-	datetime_t t0,tmin,tmax;
-	gpstime_t gmin,gmax;
+	DateTime t0,tmin,tmax;
+	GpsTime gmin,gmax;
 	double dt;
 	int igrx;
 
@@ -1813,7 +1738,7 @@ int main(int argc, char *argv[])
 				t0.mm = gmt->tm_min;
 				t0.sec = (double)gmt->tm_sec;
 
-				date2gps(&t0, &g0);
+				g0 = GpsTime(&t0);
 
 				break;
 			}
@@ -1826,7 +1751,7 @@ int main(int argc, char *argv[])
 				exit(1);
 			}
 			t0.sec = floor(t0.sec);
-			date2gps(&t0, &g0);
+            g0 = GpsTime(&t0);
 			break;
 		case 'd':
 			duration = atof(optarg);
@@ -1969,14 +1894,14 @@ int main(int argc, char *argv[])
 	{
 		if (timeoverwrite==TRUE)
 		{
-			gpstime_t gtmp;
-			datetime_t ttmp;
+			GpsTime gtmp;
+			DateTime ttmp;
 			double dsec;
 
 			gtmp.week = g0.week;
 			gtmp.sec = (double)(((int)(g0.sec))/7200)*7200.0;
 
-			dsec = subGpsTime(gtmp,gmin);
+			dsec = gtmp.Sub(gmin);
 
 			// Overwrite the UTC reference week number
 			ionoutc.wnt = gtmp.week;
@@ -1992,12 +1917,12 @@ int main(int argc, char *argv[])
 				{
 					if (eph[i][sv].vflg == 1)
 					{
-						gtmp = incGpsTime(eph[i][sv].toc, dsec);
-						gps2date(&gtmp,&ttmp);
+						gtmp = GpsTime(eph[i][sv].toc, dsec);
+                        ttmp = DateTime(&gtmp);
 						eph[i][sv].toc = gtmp;
 						eph[i][sv].t = ttmp;
 
-						gtmp = incGpsTime(eph[i][sv].toe, dsec);
+						gtmp = GpsTime(eph[i][sv].toe, dsec);
 						eph[i][sv].toe = gtmp;
 					}
 				}
@@ -2346,3 +2271,4 @@ int main(int argc, char *argv[])
 
 	return(0);
 }
+
