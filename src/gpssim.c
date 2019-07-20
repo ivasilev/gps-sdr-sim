@@ -1618,12 +1618,7 @@ int allocateChannel(channel_t *chan, ephem_t *eph, ionoutc_t ionoutc, gpstime_t 
 						r_ref = rho.range;
 
 						phase_ini = (2.0*r_ref - r_xyz)/LAMBDA_L1;
-#ifdef FLOAT_CARR_PHASE
 						chan[i].carr_phase = phase_ini - floor(phase_ini);
-#else
-						phase_ini -= floor(phase_ini);
-						chan[i].carr_phase = (unsigned int)(512.0 * 65536.0 * phase_ini);
-#endif
 						// Done.
 						break;
 					}
@@ -2167,9 +2162,6 @@ int main(int argc, char *argv[])
 
 				// Update code phase and data bit counters
 				computeCodePhase(&chan[i], rho, 0.1);
-#ifndef FLOAT_CARR_PHASE
-				chan[i].carr_phasestep = (int)round(512.0 * 65536.0 * chan[i].f_carr * delt);
-#endif
 				// Path loss
 				path_loss = 20200000.0/rho.d;
 
@@ -2191,11 +2183,7 @@ int main(int argc, char *argv[])
 			{
 				if (chan[i].prn>0)
 				{
-#ifdef FLOAT_CARR_PHASE
 					iTable = (int)floor(chan[i].carr_phase*512.0);
-#else
-					iTable = (chan[i].carr_phase >> 16) & 0x1ff; // 9-bit index
-#endif
 					ip = chan[i].dataBit * chan[i].codeCA * cosTable512[iTable] * gain[i];
 					qp = chan[i].dataBit * chan[i].codeCA * sinTable512[iTable] * gain[i];
 
@@ -2236,16 +2224,12 @@ int main(int argc, char *argv[])
 					chan[i].codeCA = chan[i].ca[(int)chan[i].code_phase]*2-1;
 
 					// Update carrier phase
-#ifdef FLOAT_CARR_PHASE
 					chan[i].carr_phase += chan[i].f_carr * delt;
 
 					if (chan[i].carr_phase >= 1.0)
 						chan[i].carr_phase -= 1.0;
 					else if (chan[i].carr_phase<0.0)
 						chan[i].carr_phase += 1.0;
-#else
-					chan[i].carr_phase += chan[i].carr_phasestep;
-#endif
 				}
 			}
 
