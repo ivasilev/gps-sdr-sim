@@ -39,6 +39,7 @@ public:
     void ComputeCodePhase(const Range& rho1, const double dt);
     int GenerateNavMsg(const GpsTime&  g, const int init);
     void Eph2sbf(const Ephemeris& eph, const Ionoutc& ionoutc);
+    void Codegen();
 
 private:
     static unsigned long computeChecksum(unsigned long source, int nib);
