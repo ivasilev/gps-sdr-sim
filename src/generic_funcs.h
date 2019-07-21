@@ -1,5 +1,5 @@
-#ifndef GENERIC_FUNCTIONS_H
-#define GENERIC_FUNCTIONS_H
+#ifndef _GENERIC_FUNCS_H
+#define _GENERIC_FUNCS_H
 
 namespace gpssim {
 
@@ -17,4 +17,4 @@ unsigned long countBits(unsigned long v);
 int replaceExpDesignator(char *str, int len);
 }
 
-#endif // GENERIC_FUNCTIONS_H
+#endif // _GENERIC_FUNCS_H

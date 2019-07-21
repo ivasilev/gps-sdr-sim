@@ -3,6 +3,10 @@
 ########################################################################
 add_executable(gpssim
     constants.h
+    channel.h
+    channel.cpp
+    range.h
+    range.cpp
     generic_funcs.h
     generic_funcs.cpp
     gpstime.h

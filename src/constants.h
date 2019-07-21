@@ -29,6 +29,18 @@
 #define LAMBDA_L1 0.190293672798365
 
 
+/*! \brief Number of subframes */
+#define N_SBF (5) // 5 subframes per frame
+
+/*! \brief Number of words per subframe */
+#define N_DWRD_SBF (10) // 10 word per subframe
+
+/*! \brief Number of words */
+#define N_DWRD ((N_SBF+1)*N_DWRD_SBF) // Subframe word buffer size
+
+/*! \brief C/A code sequence length */
+#define CA_SEQ_LEN (1023)
+
 
 
 

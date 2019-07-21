@@ -48,8 +48,8 @@ public:
 	double omgkdot; /*!< OmegaDot-OmegaEdot */
 
 public:
-    void Satpos(const GpsTime * const g, double *pos, double *vel, double *clk) const;
-    int CheckSatVisibility(const GpsTime * const g, double *xyz, double elvMask, double *azel) const;
+    void Satpos(const GpsTime& g, double *pos, double *vel, double *clk) const;
+    int CheckSatVisibility(const GpsTime& g, double *xyz, double elvMask, double *azel) const;
 };
 
 

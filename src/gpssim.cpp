@@ -14,7 +14,8 @@
 
 #include "constants.h"
 #include "ephemeris.h"
-
+#include "range.h"
+#include "channel.h"
 
 int sinTable512[] = {
 	   2,   5,   8,  11,  14,  17,  20,  23,  26,  29,  32,  35,  38,  41,  44,  47,
@@ -327,119 +328,6 @@ void neu2azel(double *azel, const double *neu)
 	return;
 }
 
-/*! \brief Compute Satellite position, velocity and clock at given time
- *  \param[in] eph Ephemeris data of the satellite
- *  \param[in] g GPS time at which position is to be computed
- *  \param[out] pos Computed position (vector)
- *  \param[out] vel Computed velociy (vector)
- *  \param[clk] clk Computed clock
- */
-void satpos(Ephemeris eph, GpsTime g, double *pos, double *vel, double *clk)
-{
-	// Computing Satellite Velocity using the Broadcast Ephemeris
-	// http://www.ngs.noaa.gov/gps-toolbox/bc_velo.htm
-
-	double tk;
-	double mk;
-	double ek;
-	double ekold;
-	double ekdot;
-	double cek,sek;
-	double pk;
-	double pkdot;
-	double c2pk,s2pk;
-	double uk;
-	double ukdot;
-	double cuk,suk;
-	double ok;
-	double sok,cok;
-	double ik;
-	double ikdot;
-	double sik,cik;
-	double rk;
-	double rkdot;
-	double xpk,ypk;
-	double xpkdot,ypkdot;
-
-	double relativistic, OneMinusecosE, tmp;
-
-	tk = g.sec - eph.toe.sec;
-
-	if(tk>SECONDS_IN_HALF_WEEK)
-		tk -= SECONDS_IN_WEEK;
-	else if(tk<-SECONDS_IN_HALF_WEEK)
-		tk += SECONDS_IN_WEEK;
-
-	mk = eph.m0 + eph.n*tk;
-	ek = mk;
-	ekold = ek + 1.0;
-  
-	OneMinusecosE = 0; // Suppress the uninitialized warning.
-	while(fabs(ek-ekold)>1.0E-14)
-	{
-		ekold = ek;
-		OneMinusecosE = 1.0-eph.ecc*cos(ekold);
-		ek = ek + (mk-ekold+eph.ecc*sin(ekold))/OneMinusecosE;
-	}
-
-	sek = sin(ek);
-	cek = cos(ek);
-
-	ekdot = eph.n/OneMinusecosE;
-
-	relativistic = -4.442807633E-10*eph.ecc*eph.sqrta*sek;
-
-	pk = atan2(eph.sq1e2*sek,cek-eph.ecc) + eph.aop;
-	pkdot = eph.sq1e2*ekdot/OneMinusecosE;
-
-	s2pk = sin(2.0*pk);
-	c2pk = cos(2.0*pk);
-
-	uk = pk + eph.cus*s2pk + eph.cuc*c2pk;
-	suk = sin(uk);
-	cuk = cos(uk);
-	ukdot = pkdot*(1.0 + 2.0*(eph.cus*c2pk - eph.cuc*s2pk));
-
-	rk = eph.A*OneMinusecosE + eph.crc*c2pk + eph.crs*s2pk;
-	rkdot = eph.A*eph.ecc*sek*ekdot + 2.0*pkdot*(eph.crs*c2pk - eph.crc*s2pk);
-
-	ik = eph.inc0 + eph.idot*tk + eph.cic*c2pk + eph.cis*s2pk;
-	sik = sin(ik);
-	cik = cos(ik);
-	ikdot = eph.idot + 2.0*pkdot*(eph.cis*c2pk - eph.cic*s2pk);
-
-	xpk = rk*cuk;
-	ypk = rk*suk;
-	xpkdot = rkdot*cuk - ypk*ukdot;
-	ypkdot = rkdot*suk + xpk*ukdot;
-
-	ok = eph.omg0 + tk*eph.omgkdot - OMEGA_EARTH*eph.toe.sec;
-	sok = sin(ok);
-	cok = cos(ok);
-
-	pos[0] = xpk*cok - ypk*cik*sok;
-	pos[1] = xpk*sok + ypk*cik*cok;
-	pos[2] = ypk*sik;
-
-	tmp = ypkdot*cik - ypk*sik*ikdot;
-
-	vel[0] = -eph.omgkdot*pos[1] + xpkdot*cok - tmp*sok;
-	vel[1] = eph.omgkdot*pos[0] + xpkdot*sok + tmp*cok;
-	vel[2] = ypk*cik*ikdot + ypkdot*sik;
-
-	// Satellite clock correction
-	tk = g.sec - eph.toc.sec;
-
-	if(tk>SECONDS_IN_HALF_WEEK)
-		tk -= SECONDS_IN_WEEK;
-	else if(tk<-SECONDS_IN_HALF_WEEK)
-		tk += SECONDS_IN_WEEK;
-
-	clk[0] = eph.af0 + tk*(eph.af1 + tk*eph.af2) + relativistic - eph.tgd;  
-	clk[1] = eph.af1 + 2.0*tk*eph.af2; 
-
-	return;
-}
 
 /*! \brief Compute Subframe from Ephemeris
  *  \param[in] eph Ephemeris of given SV
@@ -622,96 +510,6 @@ void eph2sbf(const Ephemeris eph, const ionoutc_t ionoutc, unsigned long sbf[5][
 	return;
 }
 
-/*! \brief Count number of bits set to 1
- *  \param[in] v long word in whihc bits are counted
- *  \returns Count of bits set to 1
- */
-unsigned long countBits(unsigned long v)
-{
-	unsigned long c;
-	const int S[] = {1, 2, 4, 8, 16};
-	const unsigned long B[] = {
-		0x55555555, 0x33333333, 0x0F0F0F0F, 0x00FF00FF, 0x0000FFFF};
-
-	c = v;
-	c = ((c >> S[0]) & B[0]) + (c & B[0]);
-	c = ((c >> S[1]) & B[1]) + (c & B[1]);
-	c = ((c >> S[2]) & B[2]) + (c & B[2]);
-	c = ((c >> S[3]) & B[3]) + (c & B[3]);
-	c = ((c >> S[4]) & B[4]) + (c & B[4]);
-
-	return(c);
-}
-
-/*! \brief Compute the Checksum for one given word of a subframe
- *  \param[in] source The input data
- *  \param[in] nib Does this word contain non-information-bearing bits?
- *  \returns Computed Checksum
- */
-unsigned long computeChecksum(unsigned long source, int nib)
-{
-	/*
-	Bits 31 to 30 = 2 LSBs of the previous transmitted word, D29* and D30*
-	Bits 29 to  6 = Source data bits, d1, d2, ..., d24
-	Bits  5 to  0 = Empty parity bits
-	*/ 
-
-	/*
-	Bits 31 to 30 = 2 LSBs of the previous transmitted word, D29* and D30*
-	Bits 29 to  6 = Data bits transmitted by the SV, D1, D2, ..., D24
-	Bits  5 to  0 = Computed parity bits, D25, D26, ..., D30
-	*/ 
-
-	/*
-	                  1            2           3
-	bit    12 3456 7890 1234 5678 9012 3456 7890
-	---    -------------------------------------
-	D25    11 1011 0001 1111 0011 0100 1000 0000
-	D26    01 1101 1000 1111 1001 1010 0100 0000
-	D27    10 1110 1100 0111 1100 1101 0000 0000
-	D28    01 0111 0110 0011 1110 0110 1000 0000
-	D29    10 1011 1011 0001 1111 0011 0100 0000
-	D30    00 1011 0111 1010 1000 1001 1100 0000
-	*/
-
-	unsigned long bmask[6] = { 
-		0x3B1F3480UL, 0x1D8F9A40UL, 0x2EC7CD00UL,
-		0x1763E680UL, 0x2BB1F340UL, 0x0B7A89C0UL };
-
-	unsigned long D;
-	unsigned long d = source & 0x3FFFFFC0UL;
-	unsigned long D29 = (source>>31)&0x1UL;
-	unsigned long D30 = (source>>30)&0x1UL;
-
-	if (nib) // Non-information bearing bits for word 2 and 10
-	{
-		/*
-		Solve bits 23 and 24 to presearve parity check
-		with zeros in bits 29 and 30.
-		*/
-
-		if ((D30 + countBits(bmask[4] & d)) % 2)
-			d ^= (0x1UL<<6);
-		if ((D29 + countBits(bmask[5] & d)) % 2)
-			d ^= (0x1UL<<7);
-	}
-
-	D = d;
-	if (D30)
-		D ^= 0x3FFFFFC0UL;
-
-	D |= ((D29 + countBits(bmask[0] & d)) % 2) << 5;
-	D |= ((D30 + countBits(bmask[1] & d)) % 2) << 4;
-	D |= ((D29 + countBits(bmask[2] & d)) % 2) << 3;
-	D |= ((D30 + countBits(bmask[3] & d)) % 2) << 2;
-	D |= ((D30 + countBits(bmask[4] & d)) % 2) << 1;
-	D |= ((D29 + countBits(bmask[5] & d)) % 2);
-	
-	D &= 0x3FFFFFFFUL;
-	//D |= (source & 0xC0000000UL); // Add D29* and D30* from source data bits
-
-	return(D);
-}
 
 /*! \brief Replace all 'E' exponential designators to 'D'
  *  \param str String in which all occurrences of 'E' are replaced with *  'D'
@@ -1175,7 +973,7 @@ double ionosphericDelay(const ionoutc_t *ionoutc, GpsTime g, double *llh, double
  *  \param[in] g GPS time at time of receiving the signal
  *  \param[in] xyz position of the receiver
  */
-void computeRange(range_t *rho, Ephemeris eph, ionoutc_t *ionoutc, GpsTime g, double xyz[])
+void computeRange(Range *rho, const Ephemeris& eph, const ionoutc_t *ionoutc, const GpsTime& g, const double xyz[])
 {
 	double pos[3],vel[3],clk[2];
 	double los[3];
@@ -1187,7 +985,7 @@ void computeRange(range_t *rho, Ephemeris eph, ionoutc_t *ionoutc, GpsTime g, do
 	double tmat[3][3];
 	
 	// SV position at time of the pseudorange observation.
-	satpos(eph, g, pos, vel, clk);
+	eph.Satpos(g, pos, vel, clk);
 
 	// Receiver to satellite vector and light-time.
 	subVect(los, pos, xyz);
@@ -1234,46 +1032,6 @@ void computeRange(range_t *rho, Ephemeris eph, ionoutc_t *ionoutc, GpsTime g, do
 	return;
 }
 
-/*! \brief Compute the code phase for a given channel (satellite)
- *  \param chan Channel on which we operate (is updated)
- *  \param[in] rho1 Current range, after \a dt has expired
- *  \param[in dt delta-t (time difference) in seconds
- */
-void computeCodePhase(channel_t *chan, range_t rho1, double dt)
-{
-	double ms;
-	int ims;
-	double rhorate;
-	
-	// Pseudorange rate.
-	rhorate = (rho1.range - chan->rho0.range)/dt;
-
-	// Carrier and code frequency.
-	chan->f_carr = -rhorate/LAMBDA_L1;
-	chan->f_code = CODE_FREQ + chan->f_carr*CARR_TO_CODE;
-
-	// Initial code phase and data bit counters.
-	ms = ((chan->rho0.g.Sub(chan->g0)+6.0) - chan->rho0.range/SPEED_OF_LIGHT)*1000.0;
-
-	ims = (int)ms;
-	chan->code_phase = (ms-(double)ims)*CA_SEQ_LEN; // in chip
-
-	chan->iword = ims/600; // 1 word = 30 bits = 600 ms
-	ims -= chan->iword*600;
-			
-	chan->ibit = ims/20; // 1 bit = 20 code = 20 ms
-	ims -= chan->ibit*20;
-
-	chan->icode = ims; // 1 code = 1 ms
-
-	chan->codeCA = chan->ca[(int)chan->code_phase]*2-1;
-	chan->dataBit = (int)((chan->dwrd[chan->iword]>>(29-chan->ibit)) & 0x1UL)*2-1;
-
-	// Save current pseudorange
-	chan->rho0 = rho1;
-
-	return;
-}
 
 /*! \brief Read the list of user motions from the input file
  *  \param[out] xyz Output array of ECEF vectors for user motion
@@ -1389,125 +1147,21 @@ int readNmeaGGA(double xyz[USER_MOTION_SIZE][3], const char *filename)
 	return (numd);
 }
 
-int generateNavMsg(GpsTime g, channel_t *chan, int init)
-{
-	int iwrd,isbf;
-	GpsTime g0;
-	unsigned long wn,tow;
-	unsigned sbfwrd;
-	unsigned long prevwrd;
-	int nib;
 
-	g0.week = g.week;
-	g0.sec = (double)(((unsigned long)(g.sec+0.5))/30UL) * 30.0; // Align with the full frame length = 30 sec
-	chan->g0 = g0; // Data bit reference time
-
-	wn = (unsigned long)(g0.week%1024);
-	tow = ((unsigned long)g0.sec)/6UL;
-
-	if (init==1) // Initialize subframe 5
-	{
-		prevwrd = 0UL;
-
-		for (iwrd=0; iwrd<N_DWRD_SBF; iwrd++)
-		{
-			sbfwrd = chan->sbf[4][iwrd];
-
-			// Add TOW-count message into HOW
-			if (iwrd==1)
-				sbfwrd |= ((tow&0x1FFFFUL)<<13);
-
-			// Compute checksum
-			sbfwrd |= (prevwrd<<30) & 0xC0000000UL; // 2 LSBs of the previous transmitted word
-			nib = ((iwrd==1)||(iwrd==9))?1:0; // Non-information bearing bits for word 2 and 10
-			chan->dwrd[iwrd] = computeChecksum(sbfwrd, nib);
-
-			prevwrd = chan->dwrd[iwrd];
-		}
-	}
-	else // Save subframe 5
-	{
-		for (iwrd=0; iwrd<N_DWRD_SBF; iwrd++)
-		{
-			chan->dwrd[iwrd] = chan->dwrd[N_DWRD_SBF*N_SBF+iwrd];
-
-			prevwrd = chan->dwrd[iwrd];
-		}
-		/*
-		// Sanity check
-		if (((chan->dwrd[1])&(0x1FFFFUL<<13)) != ((tow&0x1FFFFUL)<<13))
-		{
-			fprintf(stderr, "\nWARNING: Invalid TOW in subframe 5.\n");
-			return(0);
-		}
-		*/
-	}
-
-	for (isbf=0; isbf<N_SBF; isbf++)
-	{
-		tow++;
-
-		for (iwrd=0; iwrd<N_DWRD_SBF; iwrd++)
-		{
-			sbfwrd = chan->sbf[isbf][iwrd];
-
-			// Add transmission week number to Subframe 1
-			if ((isbf==0)&&(iwrd==2))
-				sbfwrd |= (wn&0x3FFUL)<<20;
-
-			// Add TOW-count message into HOW
-			if (iwrd==1)
-				sbfwrd |= ((tow&0x1FFFFUL)<<13);
-
-			// Compute checksum
-			sbfwrd |= (prevwrd<<30) & 0xC0000000UL; // 2 LSBs of the previous transmitted word
-			nib = ((iwrd==1)||(iwrd==9))?1:0; // Non-information bearing bits for word 2 and 10
-			chan->dwrd[(isbf+1)*N_DWRD_SBF+iwrd] = computeChecksum(sbfwrd, nib);
-
-			prevwrd = chan->dwrd[(isbf+1)*N_DWRD_SBF+iwrd];
-		}
-	}
-
-	return(1);
-}
-
-int checkSatVisibility(Ephemeris eph, GpsTime g, double *xyz, double elvMask, double *azel)
-{
-	double llh[3],neu[3];
-	double pos[3],vel[3],clk[3],los[3];
-	double tmat[3][3];
-
-	if (eph.vflg != 1)
-		return (-1); // Invalid
-
-	xyz2llh(xyz,llh);
-	ltcmat(llh, tmat);
-
-	satpos(eph, g, pos, vel, clk);
-	subVect(los, pos, xyz);
-	ecef2neu(los, tmat, neu);
-	neu2azel(azel, neu);
-
-	if (azel[1]*R2D > elvMask)
-		return (1); // Visible
-	// else
-	return (0); // Invisible
-}
-
-int allocateChannel(channel_t *chan, Ephemeris *eph, ionoutc_t ionoutc, GpsTime grx, double *xyz, double elvMask)
+int allocateChannel(Channel *chan, Ephemeris *eph, ionoutc_t ionoutc, GpsTime grx, double *xyz, double elvMask)
 {
 	int nsat=0;
 	int i,sv;
 	double azel[2];
 
-	range_t rho;
+	Range rho;
 	double ref[3]={0.0};
 	double r_ref,r_xyz;
 	double phase_ini;
 
 	for (sv=0; sv<MAX_SAT; sv++)
 	{
-		if(checkSatVisibility(eph[sv], grx, xyz, 0.0, azel)==1)
+		if(eph[sv].CheckSatVisibility(grx, xyz, 0.0, azel)==1)
 		{
 			nsat++; // Number of visible satellites
 
@@ -1530,7 +1184,7 @@ int allocateChannel(channel_t *chan, Ephemeris *eph, ionoutc_t ionoutc, GpsTime 
 						eph2sbf(eph[sv], ionoutc, chan[i].sbf);
 
 						// Generate navigation message
-						generateNavMsg(grx, &chan[i], 1);
+						chan[i].GenerateNavMsg(grx, 1);
 
 						// Initialize pseudorange
 						computeRange(&rho, eph[sv], &ionoutc, grx, xyz);
@@ -1603,7 +1257,7 @@ int main(int argc, char *argv[])
 	double llh[3];
 	
 	int i;
-	channel_t chan[MAX_CHAN];
+	Channel chan[MAX_CHAN];
 	double elvmask = 0.0; // in degree
 
 	int ip,qp;
@@ -2077,7 +1731,7 @@ int main(int argc, char *argv[])
 			if (chan[i].prn>0)
 			{
 				// Refresh code phase and data bit counters
-				range_t rho;
+				Range rho;
 				sv = chan[i].prn-1;
 
 				// Current pseudorange
@@ -2090,7 +1744,7 @@ int main(int argc, char *argv[])
 				chan[i].azel[1] = rho.azel[1];
 
 				// Update code phase and data bit counters
-				computeCodePhase(&chan[i], rho, 0.1);
+				chan[i].ComputeCodePhase(rho, 0.1);
 				// Path loss
 				path_loss = 20200000.0/rho.d;
 
@@ -2207,7 +1861,7 @@ int main(int argc, char *argv[])
 			for (i=0; i<MAX_CHAN; i++)
 			{
 				if (chan[i].prn>0)
-					generateNavMsg(grx, &chan[i], 0);
+					chan[i].GenerateNavMsg(grx, 0);
 			}
 
 			// Refresh ephemeris and subframes

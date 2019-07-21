@@ -10,7 +10,7 @@
  *  \param[out] vel Computed velociy (vector)
  *  \param[clk] clk Computed clock
  */
-void Ephemeris::Satpos(const GpsTime * const g, double *pos, double *vel, double *clk) const
+void Ephemeris::Satpos(const GpsTime& g, double *pos, double *vel, double *clk) const
 {
     // Computing Satellite Velocity using the Broadcast Ephemeris
     // http://www.ngs.noaa.gov/gps-toolbox/bc_velo.htm
@@ -39,7 +39,7 @@ void Ephemeris::Satpos(const GpsTime * const g, double *pos, double *vel, double
 
     double relativistic, OneMinusecosE, tmp;
 
-    tk = g->sec - toe.sec;
+    tk = g.sec - toe.sec;
 
     if(tk>SECONDS_IN_HALF_WEEK)
         tk -= SECONDS_IN_WEEK;
@@ -104,7 +104,7 @@ void Ephemeris::Satpos(const GpsTime * const g, double *pos, double *vel, double
     vel[2] = ypk*cik*ikdot + ypkdot*sik;
 
     // Satellite clock correction
-    tk = g->sec - toc.sec;
+    tk = g.sec - toc.sec;
 
     if(tk>SECONDS_IN_HALF_WEEK)
         tk -= SECONDS_IN_WEEK;
@@ -117,7 +117,7 @@ void Ephemeris::Satpos(const GpsTime * const g, double *pos, double *vel, double
     return;
 }
 
-int Ephemeris::CheckSatVisibility(const GpsTime * const g, double *xyz, double elvMask, double *azel) const
+int Ephemeris::CheckSatVisibility(const GpsTime& g, double *xyz, double elvMask, double *azel) const
 {
     double llh[3],neu[3];
     double pos[3],vel[3],clk[3],los[3];
