@@ -117,7 +117,7 @@ void Ephemeris::Satpos(const GpsTime& g, double *pos, double *vel, double *clk) 
     return;
 }
 
-int Ephemeris::CheckSatVisibility(const GpsTime& g, double *xyz, double elvMask, double *azel) const
+int Ephemeris::CheckSatVisibility(const GpsTime& g, const double * const xyz, const double elvMask, double * const azel) const
 {
     double llh[3],neu[3];
     double pos[3],vel[3],clk[3],los[3];

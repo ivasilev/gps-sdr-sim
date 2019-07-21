@@ -573,7 +573,7 @@ int readNmeaGGA(double xyz[USER_MOTION_SIZE][3], const char *filename)
 }
 
 
-int allocateChannel(Channel *chan, Ephemeris *eph, Ionoutc ionoutc, GpsTime grx, double *xyz, double elvMask)
+int allocateChannel(Channel *chan, Ephemeris *eph, const Ionoutc& ionoutc, const GpsTime& grx, const double * const xyz, const double elvMask)
 {
 	int nsat=0;
 	int i,sv;

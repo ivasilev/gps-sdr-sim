@@ -49,7 +49,7 @@ public:
 
 public:
     void Satpos(const GpsTime& g, double *pos, double *vel, double *clk) const;
-    int CheckSatVisibility(const GpsTime& g, double *xyz, double elvMask, double *azel) const;
+    int CheckSatVisibility(const GpsTime& g, const double * const xyz, const double elvMask, double * const azel) const;
 };
 
 
