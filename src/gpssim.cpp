@@ -16,6 +16,8 @@
 #include "ephemeris.h"
 #include "range.h"
 #include "channel.h"
+#include "ionoutc.h"
+#include "generic_funcs.h"
 
 int sinTable512[] = {
 	   2,   5,   8,  11,  14,  17,  20,  23,  26,  29,  32,  35,  38,  41,  44,  47,
@@ -97,39 +99,6 @@ double ant_pat_db[37] = {
 
 int allocatedSat[MAX_SAT];
 
-/*! \brief Subtract two vectors of double
- *  \param[out] y Result of subtraction
- *  \param[in] x1 Minuend of subtracion
- *  \param[in] x2 Subtrahend of subtracion
- */
-void subVect(double *y, const double *x1, const double *x2)
-{
-	y[0] = x1[0]-x2[0];
-	y[1] = x1[1]-x2[1];
-	y[2] = x1[2]-x2[2];
-
-	return;
-}
-
-/*! \brief Compute Norm of Vector
- *  \param[in] x Input vector
- *  \returns Length (Norm) of the input vector
- */
-double normVect(const double *x)
-{
-	return(sqrt(x[0]*x[0]+x[1]*x[1]+x[2]*x[2]));
-}
-
-/*! \brief Compute dot-product of two vectors
- *  \param[in] x1 First multiplicand
- *  \param[in] x2 Second multiplicand
- *  \returns Dot-product of both multiplicands
- */
-double dotProd(const double *x1, const double *x2)
-{
-	return(x1[0]*x2[0]+x1[1]*x2[1]+x1[2]*x2[2]);
-}
-
 /* !\brief generate the C/A code sequence for a given Satellite Vehicle PRN
  *  \param[in] prn PRN nuber of the Satellite Vehicle
  *  \param[out] ca Caller-allocated integer array of 1023 bytes
@@ -175,370 +144,12 @@ void codegen(int *ca, int prn)
 	return;
 }
 
-
-
-/*! \brief Convert Earth-centered Earth-fixed (ECEF) into Lat/Long/Heighth
- *  \param[in] xyz Input Array of X, Y and Z ECEF coordinates
- *  \param[out] llh Output Array of Latitude, Longitude and Height
- */
-void xyz2llh(const double *xyz, double *llh)
-{
-	double a,eps,e,e2;
-	double x,y,z;
-	double rho2,dz,zdz,nh,slat,n,dz_new;
-
-	a = WGS84_RADIUS;
-	e = WGS84_ECCENTRICITY;
-
-	eps = 1.0e-3;
-	e2 = e*e;
-
-	if (normVect(xyz)<eps)
-	{
-		// Invalid ECEF vector
-		llh[0] = 0.0;
-		llh[1] = 0.0;
-		llh[2] = -a;
-
-		return;
-	}
-
-	x = xyz[0];
-	y = xyz[1];
-	z = xyz[2];
-
-	rho2 = x*x + y*y;
-	dz = e2*z;
-
-	while (1)
-	{
-		zdz = z + dz;
-		nh = sqrt(rho2 + zdz*zdz);
-		slat = zdz / nh;
-		n = a / sqrt(1.0-e2*slat*slat);
-		dz_new = n*e2*slat;
-
-		if (fabs(dz-dz_new) < eps)
-			break;
-
-		dz = dz_new;
-	}
-
-	llh[0] = atan2(zdz, sqrt(rho2));
-	llh[1] = atan2(y, x);
-	llh[2] = nh - n;
-
-	return;
-}
-
-/*! \brief Convert Lat/Long/Height into Earth-centered Earth-fixed (ECEF)
- *  \param[in] llh Input Array of Latitude, Longitude and Height
- *  \param[out] xyz Output Array of X, Y and Z ECEF coordinates
- */
-void llh2xyz(const double *llh, double *xyz)
-{
-	double n;
-	double a;
-	double e;
-	double e2;
-	double clat;
-	double slat;
-	double clon;
-	double slon;
-	double d,nph;
-	double tmp;
-
-	a = WGS84_RADIUS;
-	e = WGS84_ECCENTRICITY;
-	e2 = e*e;
-
-	clat = cos(llh[0]);
-	slat = sin(llh[0]);
-	clon = cos(llh[1]);
-	slon = sin(llh[1]);
-	d = e*slat;
-
-	n = a/sqrt(1.0-d*d);
-	nph = n + llh[2];
-
-	tmp = nph*clat;
-	xyz[0] = tmp*clon;
-	xyz[1] = tmp*slon;
-	xyz[2] = ((1.0-e2)*n + llh[2])*slat;
-
-	return;
-}
-
-/*! \brief Compute the intermediate matrix for LLH to ECEF
- *  \param[in] llh Input position in Latitude-Longitude-Height format
- *  \param[out] t Three-by-Three output matrix
- */
-void ltcmat(const double *llh, double t[3][3])
-{
-	double slat, clat;
-	double slon, clon;
-
-	slat = sin(llh[0]);
-	clat = cos(llh[0]);
-	slon = sin(llh[1]);
-	clon = cos(llh[1]);
-
-	t[0][0] = -slat*clon;
-	t[0][1] = -slat*slon;
-	t[0][2] = clat;
-	t[1][0] = -slon;
-	t[1][1] = clon;
-	t[1][2] = 0.0;
-	t[2][0] = clat*clon;
-	t[2][1] = clat*slon;
-	t[2][2] = slat;
-
-	return;
-}
-
-/*! \brief Convert Earth-centered Earth-Fixed to ?
- *  \param[in] xyz Input position as vector in ECEF format
- *  \param[in] t Intermediate matrix computed by \ref ltcmat
- *  \param[out] neu Output position as North-East-Up format
- */
-void ecef2neu(const double *xyz, double t[3][3], double *neu)
-{
-	neu[0] = t[0][0]*xyz[0] + t[0][1]*xyz[1] + t[0][2]*xyz[2];
-	neu[1] = t[1][0]*xyz[0] + t[1][1]*xyz[1] + t[1][2]*xyz[2];
-	neu[2] = t[2][0]*xyz[0] + t[2][1]*xyz[1] + t[2][2]*xyz[2];
-
-	return;
-}
-
-/*! \brief Convert North-Eeast-Up to Azimuth + Elevation
- *  \param[in] neu Input position in North-East-Up format
- *  \param[out] azel Output array of azimuth + elevation as double
- */
-void neu2azel(double *azel, const double *neu)
-{
-	double ne;
-
-	azel[0] = atan2(neu[1],neu[0]);
-	if (azel[0]<0.0)
-		azel[0] += (2.0*PI);
-
-	ne = sqrt(neu[0]*neu[0] + neu[1]*neu[1]);
-	azel[1] = atan2(neu[2], ne);
-
-	return;
-}
-
-
-/*! \brief Compute Subframe from Ephemeris
- *  \param[in] eph Ephemeris of given SV
- *  \param[out] sbf Array of five sub-frames, 10 long words each
- */
-void eph2sbf(const Ephemeris eph, const ionoutc_t ionoutc, unsigned long sbf[5][N_DWRD_SBF])
-{
-	unsigned long wn;
-	unsigned long toe;
-	unsigned long toc;
-	unsigned long iode;
-	unsigned long iodc;
-	long deltan;
-	long cuc;
-	long cus;
-	long cic;
-	long cis;
-	long crc;
-	long crs;
-	unsigned long ecc;
-	unsigned long sqrta;
-	long m0;
-	long omg0;
-	long inc0;
-	long aop;
-	long omgdot;
-	long idot;
-	long af0;
-	long af1;
-	long af2;
-	long tgd;
-	int svhlth;
-	int codeL2;
-
-	unsigned long ura = 0UL;
-	unsigned long dataId = 1UL;
-	unsigned long sbf4_page25_svId = 63UL;
-	unsigned long sbf5_page25_svId = 51UL;
-
-	unsigned long wna;
-	unsigned long toa;
-
-	signed long alpha0,alpha1,alpha2,alpha3;
-	signed long beta0,beta1,beta2,beta3;
-	signed long A0,A1;
-	signed long dtls,dtlsf;
-	unsigned long tot,wnt,wnlsf,dn;
-	unsigned long sbf4_page18_svId = 56UL;
-
-	// FIXED: This has to be the "transmission" week number, not for the ephemeris reference time
-	//wn = (unsigned long)(eph.toe.week%1024);
-	wn = 0UL;
-	toe = (unsigned long)(eph.toe.sec/16.0);
-	toc = (unsigned long)(eph.toc.sec/16.0);
-	iode = (unsigned long)(eph.iode);
-	iodc = (unsigned long)(eph.iodc);
-	deltan = (long)(eph.deltan/POW2_M43/PI);
-	cuc = (long)(eph.cuc/POW2_M29);
-	cus = (long)(eph.cus/POW2_M29);
-	cic = (long)(eph.cic/POW2_M29);
-	cis = (long)(eph.cis/POW2_M29);
-	crc = (long)(eph.crc/POW2_M5);
-	crs = (long)(eph.crs/POW2_M5);
-	ecc = (unsigned long)(eph.ecc/POW2_M33);
-	sqrta = (unsigned long)(eph.sqrta/POW2_M19);
-	m0 = (long)(eph.m0/POW2_M31/PI);
-	omg0 = (long)(eph.omg0/POW2_M31/PI);
-	inc0 = (long)(eph.inc0/POW2_M31/PI);
-	aop = (long)(eph.aop/POW2_M31/PI);
-	omgdot = (long)(eph.omgdot/POW2_M43/PI);
-	idot = (long)(eph.idot/POW2_M43/PI);
-	af0 = (long)(eph.af0/POW2_M31);
-	af1 = (long)(eph.af1/POW2_M43);
-	af2 = (long)(eph.af2/POW2_M55);
-	tgd = (long)(eph.tgd/POW2_M31);
-	svhlth = (unsigned long)(eph.svhlth);
-	codeL2 = (unsigned long)(eph.codeL2);
-
-	wna = (unsigned long)(eph.toe.week%256);
-	toa = (unsigned long)(eph.toe.sec/4096.0);
-
-	alpha0 = (signed long)round(ionoutc.alpha0/POW2_M30);
-	alpha1 = (signed long)round(ionoutc.alpha1/POW2_M27);
-	alpha2 = (signed long)round(ionoutc.alpha2/POW2_M24);
-	alpha3 = (signed long)round(ionoutc.alpha3/POW2_M24);
-	beta0 = (signed long)round(ionoutc.beta0/2048.0);
-	beta1 = (signed long)round(ionoutc.beta1/16384.0);
-	beta2 = (signed long)round(ionoutc.beta2/65536.0);
-	beta3 = (signed long)round(ionoutc.beta3/65536.0);
-	A0 = (signed long)round(ionoutc.A0/POW2_M30);
-	A1 = (signed long)round(ionoutc.A1/POW2_M50);
-	dtls = (signed long)(ionoutc.dtls);
-	tot = (unsigned long)(ionoutc.tot/4096);
-	wnt = (unsigned long)(ionoutc.wnt%256);
-	// TO DO: Specify scheduled leap seconds in command options
-	// 2016/12/31 (Sat) -> WNlsf = 1929, DN = 7 (http://navigationservices.agi.com/GNSSWeb/)
-	// Days are counted from 1 to 7 (Sunday is 1).
-	wnlsf = 1929%256;
-	dn = 7;
-	dtlsf = 18;
-
-	// Subframe 1
-	sbf[0][0] = 0x8B0000UL<<6;
-	sbf[0][1] = 0x1UL<<8;
-	sbf[0][2] = ((wn&0x3FFUL)<<20) | ((codeL2&0x3UL)<<18) | ((ura&0xFUL)<<14) | ((svhlth&0x3FUL)<<8) | (((iodc>>8)&0x3UL)<<6);
-	sbf[0][3] = 0UL;
-	sbf[0][4] = 0UL;
-	sbf[0][5] = 0UL;
-	sbf[0][6] = (tgd&0xFFUL)<<6;
-	sbf[0][7] = ((iodc&0xFFUL)<<22) | ((toc&0xFFFFUL)<<6);
-	sbf[0][8] = ((af2&0xFFUL)<<22) | ((af1&0xFFFFUL)<<6);
-	sbf[0][9] = (af0&0x3FFFFFUL)<<8;
-
-	// Subframe 2
-	sbf[1][0] = 0x8B0000UL<<6;
-	sbf[1][1] = 0x2UL<<8;
-	sbf[1][2] = ((iode&0xFFUL)<<22) | ((crs&0xFFFFUL)<<6);
-	sbf[1][3] = ((deltan&0xFFFFUL)<<14) | (((m0>>24)&0xFFUL)<<6);
-	sbf[1][4] = (m0&0xFFFFFFUL)<<6;
-	sbf[1][5] = ((cuc&0xFFFFUL)<<14) | (((ecc>>24)&0xFFUL)<<6);
-	sbf[1][6] = (ecc&0xFFFFFFUL)<<6;
-	sbf[1][7] = ((cus&0xFFFFUL)<<14) | (((sqrta>>24)&0xFFUL)<<6);
-	sbf[1][8] = (sqrta&0xFFFFFFUL)<<6;
-	sbf[1][9] = (toe&0xFFFFUL)<<14;
-
-	// Subframe 3
-	sbf[2][0] = 0x8B0000UL<<6;
-	sbf[2][1] = 0x3UL<<8;
-	sbf[2][2] = ((cic&0xFFFFUL)<<14) | (((omg0>>24)&0xFFUL)<<6);
-	sbf[2][3] = (omg0&0xFFFFFFUL)<<6;
-	sbf[2][4] = ((cis&0xFFFFUL)<<14) | (((inc0>>24)&0xFFUL)<<6);
-	sbf[2][5] = (inc0&0xFFFFFFUL)<<6;
-	sbf[2][6] = ((crc&0xFFFFUL)<<14) | (((aop>>24)&0xFFUL)<<6);
-	sbf[2][7] = (aop&0xFFFFFFUL)<<6;
-	sbf[2][8] = (omgdot&0xFFFFFFUL)<<6;
-	sbf[2][9] = ((iode&0xFFUL)<<22) | ((idot&0x3FFFUL)<<8);
-
-	if (ionoutc.vflg==TRUE)
-	{
-		// Subframe 4, page 18
-		sbf[3][0] = 0x8B0000UL<<6;
-		sbf[3][1] = 0x4UL<<8;
-		sbf[3][2] = (dataId<<28) | (sbf4_page18_svId<<22) | ((alpha0&0xFFUL)<<14) | ((alpha1&0xFFUL)<<6);
-		sbf[3][3] = ((alpha2&0xFFUL)<<22) | ((alpha3&0xFFUL)<<14) | ((beta0&0xFFUL)<<6);
-		sbf[3][4] = ((beta1&0xFFUL)<<22) | ((beta2&0xFFUL)<<14) | ((beta3&0xFFUL)<<6);
-		sbf[3][5] = (A1&0xFFFFFFUL)<<6;
-		sbf[3][6] = ((A0>>8)&0xFFFFFFUL)<<6;
-		sbf[3][7] = ((A0&0xFFUL)<<22) | ((tot&0xFFUL)<<14) | ((wnt&0xFFUL)<<6);
-		sbf[3][8] = ((dtls&0xFFUL)<<22) | ((wnlsf&0xFFUL)<<14) | ((dn&0xFFUL)<<6);
-		sbf[3][9] = (dtlsf&0xFFUL)<<22;
-	
-	}
-	else
-	{
-		// Subframe 4, page 25
-		sbf[3][0] = 0x8B0000UL<<6;
-		sbf[3][1] = 0x4UL<<8;
-		sbf[3][2] = (dataId<<28) | (sbf4_page25_svId<<22);
-		sbf[3][3] = 0UL;
-		sbf[3][4] = 0UL;
-		sbf[3][5] = 0UL;
-		sbf[3][6] = 0UL;
-		sbf[3][7] = 0UL;
-		sbf[3][8] = 0UL;
-		sbf[3][9] = 0UL;
-	}
-
-	// Subframe 5, page 25
-	sbf[4][0] = 0x8B0000UL<<6;
-	sbf[4][1] = 0x5UL<<8;
-	sbf[4][2] = (dataId<<28) | (sbf5_page25_svId<<22) | ((toa&0xFFUL)<<14) | ((wna&0xFFUL)<<6);
-	sbf[4][3] = 0UL;
-	sbf[4][4] = 0UL;
-	sbf[4][5] = 0UL;
-	sbf[4][6] = 0UL;
-	sbf[4][7] = 0UL;
-	sbf[4][8] = 0UL;
-	sbf[4][9] = 0UL;
-
-	return;
-}
-
-
-/*! \brief Replace all 'E' exponential designators to 'D'
- *  \param str String in which all occurrences of 'E' are replaced with *  'D'
- *  \param len Length of input string in bytes
- *  \returns Number of characters replaced
- */
-int replaceExpDesignator(char *str, int len)
-{
-	int i,n=0;
-
-	for (i=0; i<len; i++)
-	{
-		if (str[i]=='D')
-		{
-			n++;
-			str[i] = 'E';
-		}
-	}
-	
-	return(n);
-}
-
-
 /*! \brief Read Ephemersi data from the RINEX Navigation file */
 /*  \param[out] eph Array of Output SV ephemeris data
  *  \param[in] fname File name of the RINEX file
  *  \returns Number of sets of ephemerides in the file
  */
-int readRinexNavAll(Ephemeris eph[][MAX_SAT], ionoutc_t *ionoutc, const char *fname)
+int readRinexNavAll(Ephemeris eph[][MAX_SAT], Ionoutc *ionoutc, const char *fname)
 {
 	FILE *fp;
 	int ieph;
@@ -890,7 +501,7 @@ int readRinexNavAll(Ephemeris eph[][MAX_SAT], ionoutc_t *ionoutc, const char *fn
 	return(ieph);
 }
 
-double ionosphericDelay(const ionoutc_t *ionoutc, GpsTime g, double *llh, double *azel)
+double ionosphericDelay(const Ionoutc *ionoutc, GpsTime g, double *llh, double *azel)
 {
 	double iono_delay = 0.0;
 	double E,phi_u,lam_u,F;
@@ -973,7 +584,7 @@ double ionosphericDelay(const ionoutc_t *ionoutc, GpsTime g, double *llh, double
  *  \param[in] g GPS time at time of receiving the signal
  *  \param[in] xyz position of the receiver
  */
-void computeRange(Range *rho, const Ephemeris& eph, const ionoutc_t *ionoutc, const GpsTime& g, const double xyz[])
+void computeRange(Range *rho, const Ephemeris& eph, const Ionoutc *ionoutc, const GpsTime& g, const double xyz[])
 {
 	double pos[3],vel[3],clk[2];
 	double los[3];
@@ -1148,7 +759,7 @@ int readNmeaGGA(double xyz[USER_MOTION_SIZE][3], const char *filename)
 }
 
 
-int allocateChannel(Channel *chan, Ephemeris *eph, ionoutc_t ionoutc, GpsTime grx, double *xyz, double elvMask)
+int allocateChannel(Channel *chan, Ephemeris *eph, Ionoutc ionoutc, GpsTime grx, double *xyz, double elvMask)
 {
 	int nsat=0;
 	int i,sv;
@@ -1181,7 +792,7 @@ int allocateChannel(Channel *chan, Ephemeris *eph, ionoutc_t ionoutc, GpsTime gr
 						codegen(chan[i].ca, chan[i].prn);
 
 						// Generate subframe
-						eph2sbf(eph[sv], ionoutc, chan[i].sbf);
+						chan[i].Eph2sbf(eph[sv], ionoutc);
 
 						// Generate navigation message
 						chan[i].GenerateNavMsg(grx, 1);
@@ -1303,7 +914,7 @@ int main(int argc, char *argv[])
 
 	int timeoverwrite = FALSE; // Overwirte the TOC and TOE in the RINEX file
 
-	ionoutc_t ionoutc;
+	Ionoutc ionoutc;
 
 	////////////////////////////////////////////////////////////
 	// Read options
@@ -1879,7 +1490,7 @@ int main(int argc, char *argv[])
 						{
 							// Generate new subframes if allocated
 							if (chan[i].prn!=0) 
-								eph2sbf(eph[ieph][chan[i].prn-1], ionoutc, chan[i].sbf);
+								chan[i].Eph2sbf(eph[ieph][chan[i].prn-1], ionoutc);
 						}
 					}
 						

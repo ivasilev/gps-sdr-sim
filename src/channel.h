@@ -11,6 +11,9 @@
 #include "gpstime.h"
 #include "range.h"
 
+class Ephemeris;
+class Ionoutc;
+
 /*! \brief Structure representing a Channel */
 class Channel
 {
@@ -35,6 +38,7 @@ public:
 public:
     void ComputeCodePhase(const Range& rho1, const double dt);
     int GenerateNavMsg(const GpsTime&  g, const int init);
+    void Eph2sbf(const Ephemeris& eph, const Ionoutc& ionoutc);
 
 private:
     static unsigned long computeChecksum(unsigned long source, int nib);

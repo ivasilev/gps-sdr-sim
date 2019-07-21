@@ -6,7 +6,6 @@
 #define WGS84_RADIUS	6378137.0
 #define WGS84_ECCENTRICITY 0.0818191908426
 
-namespace gpssim {
 /*! \brief Subtract two vectors of double
  *  \param[out] y Result of subtraction
  *  \param[in] x1 Minuend of subtracion
@@ -191,26 +190,6 @@ void neu2azel(double *azel, const double *neu)
     return;
 }
 
-/*! \brief Count number of bits set to 1
- *  \param[in] v long word in whihc bits are counted
- *  \returns Count of bits set to 1
- */
-unsigned long countBits(unsigned long v)
-{
-    unsigned long c;
-    const int S[] = {1, 2, 4, 8, 16};
-    const unsigned long B[] = {
-        0x55555555, 0x33333333, 0x0F0F0F0F, 0x00FF00FF, 0x0000FFFF};
-
-    c = v;
-    c = ((c >> S[0]) & B[0]) + (c & B[0]);
-    c = ((c >> S[1]) & B[1]) + (c & B[1]);
-    c = ((c >> S[2]) & B[2]) + (c & B[2]);
-    c = ((c >> S[3]) & B[3]) + (c & B[3]);
-    c = ((c >> S[4]) & B[4]) + (c & B[4]);
-
-    return(c);
-}
 
 /*! \brief Replace all 'E' exponential designators to 'D'
  *  \param str String in which all occurrences of 'E' are replaced with *  'D'
@@ -231,7 +210,5 @@ int replaceExpDesignator(char *str, int len)
     }
 
     return(n);
-}
-
 }
 

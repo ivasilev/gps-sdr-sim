@@ -7,6 +7,8 @@ add_executable(gpssim
     channel.cpp
     range.h
     range.cpp
+    ionoutc.h
+    ionoutc.cpp
     generic_funcs.h
     generic_funcs.cpp
     gpstime.h

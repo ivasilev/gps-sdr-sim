@@ -7,6 +7,9 @@
 #ifndef CONSTANTS_H
 #define CONSTANTS_H
 
+#define TRUE	(1)
+#define FALSE	(0)
+
 
 #define SECONDS_IN_WEEK 604800.0
 #define SECONDS_IN_HALF_WEEK 302400.0

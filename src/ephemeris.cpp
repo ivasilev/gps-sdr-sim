@@ -126,13 +126,13 @@ int Ephemeris::CheckSatVisibility(const GpsTime& g, double *xyz, double elvMask,
     if (vflg != 1)
         return (-1); // Invalid
 
-    gpssim::xyz2llh(xyz,llh);
-    gpssim::ltcmat(llh, tmat);
+    xyz2llh(xyz,llh);
+    ltcmat(llh, tmat);
 
     Satpos(g, pos, vel, clk);
-    gpssim::subVect(los, pos, xyz);
-    gpssim::ecef2neu(los, tmat, neu);
-    gpssim::neu2azel(azel, neu);
+    subVect(los, pos, xyz);
+    ecef2neu(los, tmat, neu);
+    neu2azel(azel, neu);
 
     if (azel[1]*R2D > elvMask)
         return (1); // Visible
