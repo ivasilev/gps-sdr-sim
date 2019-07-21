@@ -22,9 +22,9 @@ public:
 
 public:
     GpsTime();
-    GpsTime(const DateTime * const t);
-    GpsTime(const GpsTime * const g, const double dt);
-    double Sub(const GpsTime * const g);
+    GpsTime(const DateTime& t);
+    GpsTime(const GpsTime& g, const double dt);
+    double Sub(const GpsTime& g);
 };
 
 /*! \brief Structure repreenting UTC time */
@@ -39,7 +39,7 @@ public:
 	double sec;	/*!< Calendar seconds */
 public:
     DateTime();
-    DateTime(const GpsTime * const g);
+    DateTime(const GpsTime& g);
 };
 
 #endif // _GPSTIME_H_

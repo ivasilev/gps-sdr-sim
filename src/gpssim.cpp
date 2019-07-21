@@ -896,13 +896,13 @@ int readRinexNavAll(Ephemeris eph[][MAX_SAT], ionoutc_t *ionoutc, const char *fn
 		tmp[2] = 0;
 		t.sec = atof(tmp);
 
-        g = GpsTime(&t);
+        g = GpsTime(t);
 		
 		if (g0.week==-1)
 			g0 = g;
 
 		// Check current time of clock
-		dt = g.Sub(&g0);
+		dt = g.Sub(g0);
 		
 		if (dt>SECONDS_IN_HOUR)
 		{
@@ -1738,7 +1738,7 @@ int main(int argc, char *argv[])
 				t0.mm = gmt->tm_min;
 				t0.sec = (double)gmt->tm_sec;
 
-				g0 = GpsTime(&t0);
+				g0 = GpsTime(t0);
 
 				break;
 			}
@@ -1751,7 +1751,7 @@ int main(int argc, char *argv[])
 				exit(1);
 			}
 			t0.sec = floor(t0.sec);
-            g0 = GpsTime(&t0);
+            g0 = GpsTime(t0);
 			break;
 		case 'd':
 			duration = atof(optarg);
@@ -1918,7 +1918,7 @@ int main(int argc, char *argv[])
 					if (eph[i][sv].vflg == 1)
 					{
 						gtmp = GpsTime(eph[i][sv].toc, dsec);
-                        ttmp = DateTime(&gtmp);
+                        ttmp = DateTime(gtmp);
 						eph[i][sv].toc = gtmp;
 						eph[i][sv].t = ttmp;
 
@@ -1962,7 +1962,7 @@ int main(int argc, char *argv[])
 		{
 			if (eph[i][sv].vflg == 1)
 			{
-				dt = subGpsTime(g0, eph[i][sv].toc);
+				dt = g0.Sub(eph[i][sv].toc);
 				if (dt>=-SECONDS_IN_HOUR && dt<SECONDS_IN_HOUR)
 				{
 					ieph = i;
@@ -1986,7 +1986,9 @@ int main(int argc, char *argv[])
 	////////////////////////////////////////////////////////////
 
 	// Allocate I/Q buffer
-	iq_buff = calloc(2*iq_buff_size, 2);
+    //
+    // TODO: IVA: Check cast!
+	iq_buff = (short *) calloc(2*iq_buff_size, 2);
 
 	if (iq_buff==NULL)
 	{
@@ -1996,7 +1998,8 @@ int main(int argc, char *argv[])
 
 	if (data_format==SC08)
 	{
-		iq8_buff = calloc(2*iq_buff_size, 1);
+        // TODO: IVA: check cast!
+		iq8_buff = (signed char *)calloc(2*iq_buff_size, 1);
 		if (iq8_buff==NULL)
 		{
 			fprintf(stderr, "ERROR: Faild to allocate 8-bit I/Q buffer.\n");
@@ -2005,7 +2008,8 @@ int main(int argc, char *argv[])
 	}
 	else if (data_format==SC01)
 	{
-		iq8_buff = calloc(iq_buff_size/4, 1); // byte = {I0, Q0, I1, Q1, I2, Q2, I3, Q3}
+        // TODO: IVA: Check cast!
+		iq8_buff = (signed char *)calloc(iq_buff_size/4, 1); // byte = {I0, Q0, I1, Q1, I2, Q2, I3, Q3}
 		if (iq8_buff==NULL)
 		{
 			fprintf(stderr, "ERROR: Faild to allocate compressed 1-bit I/Q buffer.\n");
@@ -2038,7 +2042,7 @@ int main(int argc, char *argv[])
 		allocatedSat[sv] = -1;
 
 	// Initial reception time
-	grx = incGpsTime(g0, 0.0);
+	grx = GpsTime(g0, 0.0);
 
 	// Allocate visible satellites
 	allocateChannel(chan, eph[ieph], ionoutc, grx, xyz[0], elvmask);
@@ -2064,7 +2068,7 @@ int main(int argc, char *argv[])
 	tstart = clock();
 
 	// Update receiver time
-	grx = incGpsTime(grx, 0.1);
+	grx = GpsTime(grx, 0.1);
 
 	for (iumd=1; iumd<numd; iumd++)
 	{
@@ -2212,7 +2216,7 @@ int main(int argc, char *argv[])
 			{
 				if (eph[ieph+1][sv].vflg==1)
 				{
-					dt = subGpsTime(eph[ieph+1][sv].toc, grx);
+					dt = eph[ieph+1][sv].toc.Sub(grx);
 					if (dt<SECONDS_IN_HOUR)
 					{
 						ieph++;
@@ -2249,10 +2253,10 @@ int main(int argc, char *argv[])
 		}
 
 		// Update receiver time
-		grx = incGpsTime(grx, 0.1);
+		grx = GpsTime(grx, 0.1);
 
 		// Update time counter
-		fprintf(stderr, "\rTime into run = %4.1f", subGpsTime(grx, g0));
+		fprintf(stderr, "\rTime into run = %4.1f", grx.Sub(g0));
 		fflush(stdout);
 	}
 
